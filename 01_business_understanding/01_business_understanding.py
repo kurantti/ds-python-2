@@ -4,10 +4,6 @@
 # ----
 
 # LIBRARIES ----
-import pandas as pd
-import numpy as np
-import janitor as jn
-import plotly.express as px
 
 # BUSINESS SCIENCE PROBLEM FRAMEWORK ----
 
@@ -28,7 +24,6 @@ import plotly.express as px
 # Collect Outcomes:
 #   - Revenue has slowed, Email growth has slowed
 
-
 # Understand the Drivers ----
 
 #   - Key Insights:
@@ -44,6 +39,12 @@ import plotly.express as px
 
 
 # COLLECT OUTCOMES ----
+
+import pandas as pd
+import numpy as np
+import janitor as jn
+import plotly.express as px
+
 
 
 email_list_size_1 = 1e5
@@ -154,3 +155,4 @@ def create_cost_tbl(
 # - Meet with Marketing Team
 # - Notice increases in sales after webinars (called Learning Labs)
 # - Next: Begin Data Collection and Understanding
+

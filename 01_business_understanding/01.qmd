@@ -38,37 +38,15 @@ import plotly.express as px
 
 ## parameters
 
-```{python}
-email_list_size_1 = 1e5
-email_list_size_1
-## unsub count
-unsub_count_1 = 5e2
-unsub_rate_1 = unsub_count_1 / email_list_size_1
 
-emails_per_month_1 = 5
-conversion_1 = 0.05  # customers that can be made loyal if contacted
-lost_customer = email_list_size_1 * unsub_rate_1 * emails_per_month_1 * conversion_1
-lost_customer  # lost customer for 5 emails per month
-customer_value = 2e3
-lost_revenue = lost_customer * customer_value
-```
+# funs
 
 ```{python}
-# No-growth scenario $3M cost
-lost_revenue_per_year = lost_revenue * 12  # there is large cost involved
 
-# 2.5% growth scenario:
-#   amount = principle * ((1+rate)**time)
-((1 + 0.035) ** 11) * email_list_size_1  # in 12 months
-
-# If reduce unsubscribe rate by 30%
-```
-
-```{python}
-# Function: Summarize Cost ----
 def cost_tbl(
         email_list_size=1e5,
         email_list_growth_rate=0.035,
+        emails_per_month=500,
         sales_emails=5,
         unsub_rate=0.005,
         conversion_rate=0.05,
@@ -79,21 +57,19 @@ def cost_tbl(
   
     period_series = pd.Series(np.arange(0, periods), name="period")
     df = period_series.to_frame()
-    df["email_no_growth"] = np.repeat(email_list_size_1, 12)
-    df["email_no_growth"] = np.repeat(email_list_size_1, 12)  # this is email list size during 12 month period
-    df["lost_customers_no_growth"] = df["email_no_growth"] * ((1 + 0.035) ** df["period"])
+
+    df["email_no_growth"] = np.repeat(email_list_size, periods)
+    
+    df["lost_customers_no_growth"] = df["email_no_growth"] * unsub_rate*emails_per_month * conversion_rate
+
     df["cost_no_grown"] = df["lost_customers_no_growth"] * customer_value  # value of customers that are lost
-    df["emails_with_growth"] = df["email_no_growth"] * ((1 + 0.035) ** df["period"])
-    df['lost_customers_with_growth'] = df['emails_with_growth'] * unsub_rate_1 * emails_per_month_1 * conversion_1
+
+    df["emails_with_growth"] = df["email_no_growth"] * ((1 + email_list_growth_rate) ** df["period"])
+    
+    df['lost_customers_with_growth'] = df['emails_with_growth'] * unsub_rate * emails_per_month * conversion_rate
     df['cost_with_growth'] = df['lost_customers_with_growth'] * customer_value
 
     return df
-
-df = cost_tbl(email_list_size=50000, sales_emails=1)
-```
-
-
-```{python}
 
 def cost_summary(cost_df: pd.DataFrame):
   summary_df = cost_df[["cost_no_grown", 'cost_with_growth']].sum()\
@@ -101,44 +77,18 @@ def cost_summary(cost_df: pd.DataFrame):
     
   return summary_df
 
+```
+
+
+```{python}
+df = cost_tbl()
+df
 cost_summary(df)
 
 ```
 
 
-```{python}
-# COST CALCULATION FUNCTIONS ----
-period_series = pd.Series(np.arange(0, 12), name="period")
-# Function: Calculate Monthly Unsubscriber Cost Table ----
-df = period_series.to_frame()
-# no growth
-df["email_no_growth"] = np.repeat(email_list_size_1, 12)  # this is email list size during 12 month period
-df["lost_customers_no_growth"] = df[
-                                     "email_no_growth"] * unsub_rate_1 * emails_per_month_1 * conversion_1  # per month 500 customers are leaving from the list
-df["cost_no_grown"] = df["lost_customers_no_growth"] * customer_value  # value of customers that are lost
 
-# with growth
-df["emails_with_growth"] = df["email_no_growth"] * ((1 + 0.035) ** df["period"])
-df
-```
-
-```{python}
-# viz = px.line(df, ["emails_with_growth", "email_no_growth"]).add_hline(y=0)
-# viz.show(renderer='plotly_mimetype+notebook')
-```
-
-```{python}
-# df_test = pd.DataFrame(np.random.randn(100, 4), columns='A B C D'.split())
-# print(df_test.head())
-# fig = px.line(df_test)
-df.columns
-df['lost_customers_with_growth'] = df['emails_with_growth'] * unsub_rate_1 * emails_per_month_1 * conversion_1
-df
-
-# cost no growth
-df['cost_with_growth'] = df['lost_customers_with_growth'] * customer_value
-df
-```
 
 ```{python}
 # compare cost
@@ -150,63 +100,64 @@ df
 
 
 
-# ARE OBJECTIVES BEING MET?
-
-# - We can see a large cost due to unsubscription
-
-# - However, some attributes may vary causing costs to change
-
-# SYNTHESIZE OUTCOMES (COST SIMULATION) ----
-
-# - Make a cartesian product of inputs that can vary
 
 ```{python}
-import janitor as jn
+def simulate_cost(
+  email_growth_rate = [0,2,3],
+  conversion = [0.003, 0.006, 0.010],
+  **kwargs):
+    d = { 'email_gth_rate':  email_growth_rate,
+    'convertion_rate':  conversion}
 
-data_dict = {email_gth_rate: np.linspace(0,0.05, num = 10),
-  convertion_rate:  np.linspace(0.04, 0.06, num = 10)}
-  
+    out = pd.MultiIndex.from_product(d.values(),names=d.keys()).to_frame().reset_index(drop=True)
+    
+    def temp_func2(x,y):
+      cost_df = cost_tbl(
+        email_list_growth_rate=x,
+        conversion_rate=y, **kwargs
+        )
+      
+      summary_df = cost_summary(cost_df)
+      return summary_df
+    
+    summary_list =[temp_func2(x,y) for x,y in zip( out['email_gth_rate'],  out['convertion_rate'])]
 
-data_dict
-parameter_grid = jn.expand_grid(others = data_dict)
-parameter_grid
+    summary_params = pd.concat(summary_list, axis = 0).reset_index()\
+    .drop('index', axis = 1).merge(out, left_index=True, right_index=True)
 
-# parameter_grid = jn.expand_grid(others = data_dict)
-# parameter_grid
+
+
+    return summary_params
+
+
+res = simulate_cost(
+  email_growth_rate = [0.01,0.08], 
+  conversion = [0.03, 0.05], 
+  email_list_size = 100000
+  )
+res
+
 ```
-```{python}
-def temp_func(x,y):
-  # TODO: write code...
-  cost_df = cost_tbl(email_list_size=x,
-  conversion_rate=y)
-  summary_df = cost_summary(cost_df)
-  return summary_df
-
-temp_func(0.01, 0.23)
-
-summary_list = [temp_func(x,y) for x,y in zip
-( parameter_grid['email_gth_rate'],
-  parameter_grid['convertion_rate'])]
-
-summary_list
-summary_params = pd.concat(summary_list, axis = 0).reset_index()\
-.drop('index', axis = 1)
-.merge(data_dict)
-summary_params
-```
-
-
-# - Use list comprehension to perform simulation
-
-# - Visualize results
-
-# Cartesian Product (Expand Grid)
-
-# Function
 
 # VISUALIZE COSTS
 
 # Function: Plot Simulated Unsubscriber Costs
+
+```{python}
+res.columns
+res_ims = res.drop('cost_no_grown', axis=1)\
+.pivot(
+  index = 'email_gth_rate',
+  columns = 'convertion_rate',
+  values = 'cost_with_growth'
+)
+
+res_ims
+px.imshow(
+  res_ims, origin='lower',
+  aspect='auto')
+```
+
 
 # ARE OBJECTIVES BEING MET?
 

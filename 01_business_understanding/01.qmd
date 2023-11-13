@@ -24,7 +24,8 @@ High unsubscribe rates: 500 people per sales email - Revenue: - Company
 sales cycle is generating about \$250,000 per month - Average Customer
 Lifetime Value: Estimate \$2000/customer - Costs: - Marketing sends 5
 Sales Emails Per Month - 5% of lost customers likely to convert if
-nutured TODO: think life
+nutured 
+TODO: think life
 
 # COLLECT OUTCOMES ----
 
@@ -144,18 +145,29 @@ res
 # Function: Plot Simulated Unsubscriber Costs
 
 ```{python}
-res.columns
-res_ims = res.drop('cost_no_grown', axis=1)\
-.pivot(
-  index = 'email_gth_rate',
-  columns = 'convertion_rate',
-  values = 'cost_with_growth'
-)
 
-res_ims
-px.imshow(
-  res_ims, origin='lower',
-  aspect='auto')
+def plot_simulations(res:pd.DataFrame = res):
+
+  res_ims = res.drop('cost_no_grown', axis=1)\
+  .pivot(
+    index = 'email_gth_rate',
+    columns = 'convertion_rate',
+    values = 'cost_with_growth')
+      
+  fig = px.imshow(
+    res_ims, origin='lower',
+    aspect='auto',
+    title = 'Cost simulation')
+
+  return fig
+
+
+plot_simulations()
+
+```
+
+```{python}
+
 ```
 
 

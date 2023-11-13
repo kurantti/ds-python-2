@@ -1,0 +1,146 @@
+---
+title: "Quarto Basics"
+format:
+  html:
+    code-fold: true
+jupyter: python3
+
+---
+
+```{python}
+
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import os
+import sys
+# New Libraries:
+import sweetviz as sv
+import sqlalchemy as sql
+```
+
+```{python}
+os.getcwd()
+```
+```{python}
+
+module_path2 = os.path.abspath(os.path.join('..'))
+x2 = module_path2+"/email_lead_scoring"
+```
+
+
+```{python}
+
+if x2 not in sys.path:
+    sys.path.append(x2)
+print(sys.path)
+```
+
+
+```{python}
+import cost_calculations as els 
+```
+```{python}
+#| label: fig-polar
+#| fig-cap: "A line plot on a polar axis"
+
+
+r = np.arange(0, 2, 0.01)
+theta = 2 * np.pi * r
+fig, ax = plt.subplots(
+  subplot_kw = {'projection': 'polar'} 
+)
+ax.plot(theta, r)
+ax.set_rticks([0.5, 1, 1.5, 2])
+ax.grid(True)
+plt.show()
+```
+
+
+
+```{python}
+els.simulate_cost(
+    np.linspace(0, 0.03, 5),
+    np.linspace(0.4, 0.6, 3),
+    emails_per_month=5,
+    unsub_rate=0.001,
+    email_list_size=1e5
+) \
+    .pipe(func=els.plot_simulations)
+
+```
+```{python}
+engine = sql.create_engine('sqlite:///../00_database/crm_database.sqlite')
+conn = engine.connect()
+inspect = sql.inspect(engine)
+inspect
+table_names = inspect.get_table_names()
+```
+
+# read data
+
+## products
+
+```{python}
+def read_data(tblname:str = 'Subscribers')-> pd.DataFrame:
+  engine = sql.create_engine('sqlite:///../00_database/crm_database.sqlite')
+  conn = engine.connect()
+  data = pd.read_sql(f'select * from {tblname}', con=conn)
+
+  conn.close()
+  
+  return data
+
+def tranform_types(df:pd.DataFrame, col:str = 'product_id', datatype = 'int') -> pd.DataFrame:
+  df[col]= df[col].astype(datatype)
+  return df
+```
+
+```{python}
+products = read_data('Products')
+# products.info()
+products = tranform_types(products)
+# products['product_id']= products['product_id'].astype('int')
+products.info()
+```
+
+## subscribers
+
+```{python}
+subscribers = read_data('Subscribers')
+subscribers = tranform_types(subscribers, 'mailchimp_id')
+subscribers = tranform_types(subscribers, 'member_rating')
+subscribers = tranform_types(subscribers, 'optin_time', 'datetime64[ns]')
+
+subscribers.info()
+subscribers
+```
+
+## tags
+
+```{python}
+tags = read_data('Tags')
+tags = tranform_types(tags, 'mailchimp_id')
+```
+
+## transactions
+
+```{python}
+txns = read_data('Transactions')
+txns = tranform_types(txns, 'product_id')
+
+```
+
+## website
+
+
+```{python}
+site = read_data('Website')
+site = tranform_types(site, 'date', 'datetime64[ns]')
+site = tranform_types(site, 'pageviews')
+site = tranform_types(site, 'organicsearches')
+site = tranform_types(site, 'sessions')
+site.info()
+```

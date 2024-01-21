@@ -1,0 +1,293 @@
+---
+title: "eda on subscribers on data science courses"
+subtitle: "potential conversion rate of subscribers"
+format:
+  html:
+    code-fold: false
+jupyter: python3
+---
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import os
+import sys
+import sweetviz as sv
+import sqlalchemy as sql
+```
+
+
+```{python}
+os.getcwd()
+```
+```{python}
+
+module_path2 = os.path.abspath(os.path.join('..'))
+x2 = module_path2+"/email_lead_scoring"
+```
+
+since i use a custom module, i need to add the path to the sys.path list
+
+```{python}
+
+if x2 not in sys.path:
+    sys.path.append(x2)
+print(sys.path)
+```
+
+
+```{python}
+import cost_calculations as els 
+```
+
+trivial example on how higher email growth rates and high conversion rates can lead to high sales
+
+
+```{python}
+els.simulate_cost(
+    np.linspace(0, 0.03, 5),
+    np.linspace(0.4, 0.6, 3),
+    emails_per_month=5,
+    unsub_rate=0.001,
+    email_list_size=1e5
+) \
+    .pipe(func=els.plot_simulations)
+
+```
+```{python}
+# create connection to database
+engine = sql.create_engine('sqlite:///../00_database/crm_database.sqlite')
+conn = engine.connect()
+inspect = sql.inspect(engine)
+table_names = inspect.get_table_names()
+```
+
+# read data
+
+```{python}
+def read_data(tblname: str = "Subscribers") -> pd.DataFrame:
+    """read data from sqlite database, and return dataframe"""
+    engine = sql.create_engine("sqlite:///../00_database/crm_database.sqlite")
+    conn = engine.connect()
+    data = pd.read_sql(f"select * from {tblname}", con=conn)
+
+    conn.close()
+
+    return data
+
+
+def transform_types(
+    df: pd.DataFrame, col: str = "product_id", datatype="int"
+) -> pd.DataFrame:
+    """transform selected column to new datatype"""
+    df[col] = df[col].astype(datatype)
+    return df
+```
+
+## products
+
+products dataframe list all products that are on sale and their price
+
+```{python}
+products = read_data('Products')
+products = transform_types(products)
+products.info()
+```
+
+## subscribers
+
+subscriber dataframe list all subscribers:
+
+* member rating =  which is based on x?
+* optin_time = when the person became a subscriber
+* country code = location of subscriber
+
+```{python}
+subscribers = read_data("Subscribers")
+subscribers = transform_types(subscribers, "mailchimp_id")
+subscribers = transform_types(subscribers, "member_rating")
+subscribers = transform_types(subscribers, "optin_time", "datetime64[ns]")
+
+subscribers.info()
+subscribers
+```
+
+## tags
+
+mailchimp tags are used to track user events
+
+```{python}
+tags = read_data('Tags')
+tags = transform_types(tags, 'mailchimp_id')
+```
+
+## transactions
+
+```{python}
+txns = read_data('Transactions')
+txns = transform_types(txns, 'product_id')
+
+```
+
+## website
+
+
+```{python}
+site = read_data('Website')
+site = transform_types(site, 'date', 'datetime64[ns]')
+site = transform_types(site, 'pageviews')
+site = transform_types(site, 'organicsearches')
+site = transform_types(site, 'sessions')
+site.info()
+```
+
+# analysis
+
+## subsribers
+
+```{python}
+subscribers.T
+```
+
+
+```{python}
+
+emails_purchases = txns['user_email'].unique()
+subscribers['made_purchase'] = subscribers['user_email'].isin(emails_purchases).astype(int) 
+
+```
+
+```{python}
+# count 1 and 0 values on suscribers
+made_purchase = subscribers['made_purchase'].sum()
+# total customer count
+total_customers = subscribers['made_purchase'].count()
+
+made_purchase / total_customers
+```
+
+```{python}
+# check geographic location of subscribers
+subscribers["country_code"].value_counts()
+```
+
+```{python}
+# get made purchase ratio per country_code
+subscribers.T
+
+sales_ratios = subscribers.groupby('country_code') \
+    .agg(dict(made_purchase = ['sum', lambda x: sum(x)/len(x)])) \
+    .set_axis(['sales', 'sales_ratio_per_country'], axis=1) \
+    .assign(ratio_of_total_sales = lambda x: x['sales'] / sum(x['sales'])) \
+    .sort_values('ratio_of_total_sales', ascending=False) \
+      .assign(cumulative_sum = lambda x: x['ratio_of_total_sales'].cumsum()) 
+
+sales_ratios
+```
+
+
+
+```{python}
+# filter country_code zw
+subscribers[subscribers['country_code'] == 'zw'].count()
+```
+
+
+visualize sales per country, bar chart is with log10 scale
+```{python}
+
+fig = px.bar(sales_ratios, x=sales_ratios.index, y='sales', log_y=True)
+fig.show()
+```
+
+tables that summarize sales in usd per country, top 10
+
+
+```{python}
+sales_ratios.groupby('country_code').agg(dict(sales = 'sum')).sort_values('sales', ascending=False).head(10)
+```
+
+
+calculate with pareto principle, 80% of sales come from 20% of customers
+```{python}
+
+sales_ratios.query('cumulative_sum <= 0.8')
+# what countries could be high conversion rate countries = more sales
+# if count of customer is high enough, there is potential for more sales
+
+sales_ratios.query('sales_ratio_per_country >= 0.08')
+```
+
+```{python}
+sales_ratios.quantile(q=[0.10, 0.5, 0.9])
+```
+
+```{python}
+sales_ratios.mean()
+```
+
+## products sold
+
+```{python}
+
+tags.groupby('tag')['mailchimp_id'].count().sort_values(ascending=False).head(10)
+```
+
+how many sold by customer
+
+```{python}
+
+user_events = tags.groupby('mailchimp_id').agg(dict(tag = 'count')).set_axis(['tag_count'], axis=1).reset_index()
+user_events
+```
+
+```{python}
+subscribers_user_events =subscribers.merge(user_events, on='mailchimp_id', how='left')
+subscribers_user_events.fillna(dict(tag_count = 0), inplace=True)
+subscribers_user_events.T
+subscribers_user_events.info()
+subscribers_user_events = transform_types(subscribers_user_events, 'tag_count', 'int')
+
+```
+
+made purchase agains member rating and tag count (how many products bought)
+
+```{python}
+
+subscribers_user_events.groupby('made_purchase').quantile(q=[0.1, 0.5, 0.9], numeric_only=True)
+```
+
+# sweetviz
+
+sweetviz is faster to do eda, compared to manual exploration.
+
+my target value is made_purchase  
+
+* the values seems to have high skew, only 5% made a purchase. in classification models, high skew can produce model over fitting, where major class is predicted more often. This could be solved with over (create synthetic examples) or down sampling (can lead to lose of data). Some models can handle high skew, like decision trees. Also an option is to collect more data or conduct more feature engineering.
+
+possible features for the model:
+
+* tag_count: 59% of customers had 0 tags, these might be new customers or nonactive customers. Its difficult to say if there value to focus marketing in this group. the group with 2 products bought (21% of total) could be a good target group for marketing
+* member_rating: has 0.28 correlation with tag_count, this might cause multicollinearity in the model. This feature requires futher analysis, to understand how it is calculated
+* country_code: most of the customers sit in the USA (28%) and india (20%), there might be specific marketing strategies for these countries or goals to increase sales in other countries
+
+
+```{python}
+# | eval: false
+analyzed = sv.analyze(subscribers_user_events, target_feat="made_purchase")
+analyzed.show_html()
+```
+
+what are the tag_count metrics per made_purchase
+
+```{python}
+subscribers_user_events[['made_purchase', 'tag_count']]\
+    .groupby('made_purchase') \
+        .agg(mean = ('tag_count', 'mean'),
+        median = ('tag_count', 'median'),
+        count = ('tag_count', 'count'))
+            
+```

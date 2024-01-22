@@ -22,6 +22,7 @@ def read_data(
 
 
 def get_user_events(df: pd.DataFrame) -> pd.DataFrame:
+    """count user bought items from tags"""
     e = (
         df.groupby("mailchimp_id")
         .agg(dict(tag="count"))
@@ -30,13 +31,9 @@ def get_user_events(df: pd.DataFrame) -> pd.DataFrame:
     )
     return e
 
-def made_purchase(df: pd.DataFrame) -> pd.DataFrame:
-    emails_purchases = df['user_email'].unique()
-subscribers['made_purchase'] = subscribers['user_email'].isin(emails_purchases).astype(int) 
-
 
 def join_crm_datas() -> pd.DataFrame:
-    """join all crm datas"""
+    """join all crm datas and retrive made_purchase data"""
     df_subscribers = read_data(tbl="Subscribers")
     tags = read_data(tbl="Tags")
     txns = read_data(tbl="Transactions")
@@ -51,6 +48,3 @@ def join_crm_datas() -> pd.DataFrame:
     subscribers_user_events['made_purchase'] = subscribers_user_events['user_email'].isin(made_purchase).astype(int)
 
     return subscribers_user_events
-
-
-join_crm_datas().info()

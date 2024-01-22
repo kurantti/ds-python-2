@@ -23,6 +23,7 @@ import sqlalchemy as sql
 ```{python}
 os.getcwd()
 ```
+
 ```{python}
 
 module_path2 = os.path.abspath(os.path.join('..'))
@@ -288,6 +289,7 @@ subscribers_user_events[['made_purchase', 'tag_count']]\
     .groupby('made_purchase') \
         .agg(mean = ('tag_count', 'mean'),
         median = ('tag_count', 'median'),
-        count = ('tag_count', 'count'))
+        count = ('tag_count', 'count')
+        )
             
 ```

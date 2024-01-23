@@ -48,3 +48,11 @@ def join_crm_datas() -> pd.DataFrame:
     subscribers_user_events['made_purchase'] = subscribers_user_events['user_email'].isin(made_purchase).astype(int)
 
     return subscribers_user_events
+
+
+def get_tbl_names(con: str = "sqlite:///00_database/crm_database.sqlite") -> list[str]:
+    """get all table names in database"""
+    engine = sql.create_engine(con)
+    tbl_names = sql.inspect(engine).get_table_names()
+
+    return tbl_names

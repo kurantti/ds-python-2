@@ -1,10 +1,5 @@
 import pandas as pd
-import numpy as np
 import sqlalchemy as sql
-import os
-
-os.getcwd()
-
 
 def read_data(
     con: str = "sqlite:///00_database/crm_database.sqlite", tbl: str = "Subscribers"

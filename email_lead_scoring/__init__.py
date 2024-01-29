@@ -11,3 +11,8 @@ from .read_datas import (
     join_crm_datas,
     get_tbl_names
 )
+
+from .eda import (
+    sales_by_category,
+    numeric_analysis
+)

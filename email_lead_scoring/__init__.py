@@ -14,5 +14,10 @@ from .read_datas import (
 
 from .eda import (
     sales_by_category,
+    sales_by_category2,
     numeric_analysis
+)
+
+from .data_pipeline import (
+    read_and_process
 )

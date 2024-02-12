@@ -1,0 +1,176 @@
+---
+title: "eda on subscribers on data science courses"
+subtitle: "potential conversion rate of subscribers"
+format:
+  html:
+    code-fold: false
+jupyter: python3
+---
+
+```{python}
+import os
+import sys
+module_path2 = os.path.abspath(os.path.join('..'))
+x2 = module_path2+"/email_lead_scoring"
+if x2 not in sys.path:
+    sys.path.append(x2)
+print(sys.path)
+```
+
+```{python}
+import pandas as pd
+import pandas as pd
+import numpy as np
+import plotly.express as px
+# EDA 
+import re
+import janitor as jn
+import sweetviz as sv
+# Email Lead Scoring
+from read_datas import join_crm_datas, read_data
+from eda import sales_by_category, sales_by_category2
+
+```
+
+# read data
+
+```{python}
+leads = join_crm_datas('no')
+leads
+```
+
+# date features
+
+optin_time to time spent as subscriber
+
+```{python}
+leads.T
+leads.info()
+leads['optin_time'] = pd.to_datetime(leads['optin_time'])
+leads['time_as_subscriber'] = leads['optin_time'].apply(lambda x: pd.to_datetime('today') - x).dt.days
+
+```
+
+time spent as member (time_as_subsriber) and summmary statistics agains member_rating
+  
+  ```{python}
+  leads.groupby('member_rating').agg({'time_as_subscriber':['mean','median','min','max','std']})
+  ```
+  
+
+below is the visualization of the time spent as subscriber and member rating. Interestingly there is a spike on 1900 days. Its eiher linked to data collection date or a outlier that should be removed or controlled in the model.
+generally the most of the subscribers are in category 2.
+
+  ```{python}
+  fig = px.histogram(leads, x="time_as_subscriber", color="member_rating")
+  fig.show()
+  ```
+
+what is the outlier?
+
+  ```{python}
+  pd.to_datetime('today') - pd.Timedelta(days=1900)
+  ```
+
+  ```{python}
+#same as aboe but with log10
+fig_log = px.histogram(leads, x="time_as_subscriber", color="member_rating", log_y=True )
+fig_log.show()
+  ```
+
+# user emails feature
+
+  ```{python}
+# extract email sender
+leads['email_sender'] = leads['user_email'].apply(lambda x: re.findall(r'@(.*)\.', x)[0])
+leads.T
+leads['email_sender'].value_counts()
+  ```
+
+most of the users seems to use gmail. I dont see this being important feature for the model. if for example email provider would be subsciption based, then there could be explainatory power.
+
+
+  ```{python}
+# email sender vs member rating, plotly
+fig = px.histogram(leads, x="email_sender", color="member_rating")
+fig.show()
+  ```
+
+# member ratings and time as subscriber
+
+
+tag count describes how many times user has interacted with the content. higher member rating has higher tag count. tag_count_ratio, does time as subsciber lead to higher tag count. is there relationship?
+
+  ```{python}
+  leads.groupby('member_rating').agg({'tag_count':['mean','median','std', 'max']})
+  
+  
+  leads['tag_count_ratio'] = leads['tag_count'] / leads['time_as_subscriber']
+leads
+  leads.groupby('member_rating').agg({'tag_count_ratio':['mean','median','std', 'max']})
+  ```
+
+```{python}
+
+fig = px.scatter(leads, x="time_as_subscriber", y="tag_count", color="member_rating",title="tag count vs time as subscriber")
+fig.show()
+```
+
+# tags features
+
+```{python}
+tags = read_data(db_location = 'non', tbl = 'Tags')
+tags = tags.assign(count = lambda x: 1)
+tags
+
+tags_pivot = tags.pivot_table(index='mailchimp_id', columns='tag', values='count').fillna(0).pipe(func=jn.clean_names)
+tags_pivot
+tags_pivot.info()
+
+tags_pivot.columns = ['tag_' + str(col) for col in tags_pivot.columns]
+tags_pivot
+```
+
+```{python}
+# merge to leads
+leads_with_tags = leads.merge(tags_pivot, how='left', left_on='mailchimp_id', right_on='mailchimp_id')
+leads_with_tags
+# count unique mailchimp ids
+leads_with_tags['mailchimp_id'].nunique()
+leads_with_tags.convert_dtypes().info()
+```
+
+```{python}
+
+def fill_values_with_regexp(df: pd.DataFrame, fill = 0, pattern:str = '^tag_'):
+  "fill values with 0 if column name matches with regexp"
+  for x in df.columns:
+    if re.match(pattern = pattern, string = x):
+      print(f'replacing {x} with {fill}')
+      df[x] = df[x].fillna(value=fill)
+  return df
+
+leads_with_tags_clean = fill_values_with_regexp(df = leads_with_tags)
+leads_with_tags_clean.T
+```
+
+# high cardinality features, countrycodes
+
+```{python}
+
+sales_per_leads = sales_by_category2(leads_with_tags_clean)
+
+countries_to_keep = sales_per_leads.query("sales > 6").index.to_list()
+countries_to_keep
+leads_with_tags_clean['country_code'].fillna('unk', inplace=True)
+leads_with_tags_clean['country_code'] = leads_with_tags_clean['country_code'].apply(lambda x: x if x in countries_to_keep else 'other')
+```
+
+# sweetwiz report
+```{python}
+report = sv.analyze(leads_with_tags_clean, target_feat='made_purchase', feat_cfg= sv.FeatureConfig(skip=['mailchimp_id', 
+'user_full_name','user_email', 'optin_time', 'email_sender']))
+
+report.show_html('eda_report.html')
+
+```

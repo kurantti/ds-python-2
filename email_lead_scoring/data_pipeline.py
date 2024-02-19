@@ -25,8 +25,9 @@ def process_tags(tags):
         tags.pivot_table(index="mailchimp_id", columns="tag", values="count")
         .fillna(0)
         .pipe(func=jn.clean_names)
-        .reset_index()
     )
+    tags.columns = ['tag_' + str(col) for col in tags.columns]
+    tags = tags.reset_index()
     return tags
 
 
@@ -43,6 +44,8 @@ def process_together(leads_prs, tags_prs):
     df = leads_prs.merge(
         tags_prs, how="left", left_on="mailchimp_id", right_on="mailchimp_id"
     )
+    
+    df = fill_values_with_regexp(df)
     return df
 
 
@@ -64,16 +67,15 @@ def process_features(leads, tags, made_purchase):
     tags_prs = process_tags(tags)
 
     df = process_together(leads_prs, tags_prs)
-    df = fill_values_with_regexp(df=df)
     df = step_other_country(df=df, txns=made_purchase)
 
     return df
 
 
-def read_and_process():
-    leads = els.read_data(tbl="Subscribers")
-    tags = els.read_data(tbl="Tags")
-    made_purchase = els.read_data(tbl="Transactions")["user_email"].unique()
+def read_and_process(db_loc='native'):
+    leads = els.read_data(db_location=db_loc,tbl="Subscribers")
+    tags = els.read_data(db_location=db_loc,tbl="Tags")
+    made_purchase = els.read_data(db_location=db_loc,tbl="Transactions")["user_email"].unique()
     x = process_features(leads, tags, made_purchase)
 
     return x
